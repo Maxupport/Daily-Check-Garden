@@ -1,0 +1,177 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// Auth tables (required by @auth/prisma-adapter)
+// ============================================
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================================
+// Application Models
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  bio           String?   @default("")
+  isActive      Boolean   @default(true)
+  role          Role      @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Auth relations
+  accounts Account[]
+  sessions Session[]
+
+  // App relations
+  quests        Quest[]
+  logsAuthored  DailyLog[]
+  flowersSent   FlowerTransaction[] @relation("FlowerSender")
+  flowersReceived FlowerTransaction[] @relation("FlowerReceiver")
+  wishPledges   WishPledge[]
+
+  // Flower balances
+  yellowFlowers   Int @default(0) // Daily quota, resets each day
+  redFlowers      Int @default(0) // Accumulated from others (can be exchanged)
+  purpleFlowers   Int @default(0) // From completed wish pools (can be exchanged)
+  lifetimeRedFlowers Int @default(0) // Historical total red flowers received
+  lifetimePurpleFlowers Int @default(0) // Historical total purple flowers received
+  lastDailyReset  DateTime?
+  hasClaimedToday Boolean @default(false)
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model Quest {
+  id             String   @id @default(cuid())
+  title          String
+  durationType   String   @default("DAYS") // DAYS, WEEKS, MONTHS
+  durationValue  Int
+  totalTargetDays Int
+  currentStreak  Int      @default(0)
+  isCompleted    Boolean  @default(false)
+  isPublic       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  logs     DailyLog[]
+  wishPool WishPool?
+}
+
+model DailyLog {
+  id        String   @id @default(cuid())
+  text      String   @db.Text
+  imageUrl  String?
+  createdAt DateTime @default(now())
+
+  questId String
+  quest   Quest  @relation(fields: [questId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+}
+
+model WishPool {
+  id          String   @id @default(cuid())
+  targetFlowers Int    @default(100)
+  currentFlowers Int   @default(0)
+  isCompleted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  questId String  @unique
+  quest   Quest   @relation(fields: [questId], references: [id], onDelete: Cascade)
+
+  pledges WishPledge[]
+}
+
+model WishPledge {
+  id          String   @id @default(cuid())
+  flowerCount Int      @default(1)
+  createdAt   DateTime @default(now())
+
+  wishPoolId String
+  wishPool   WishPool @relation(fields: [wishPoolId], references: [id], onDelete: Cascade)
+
+  pledgerId String
+  pledger   User   @relation(fields: [pledgerId], references: [id])
+}
+
+model FlowerTransaction {
+  id          String      @id @default(cuid())
+  amount      Int         @default(1)
+  type        FlowerType
+  createdAt   DateTime    @default(now())
+
+  senderId   String
+  sender     User   @relation("FlowerSender", fields: [senderId], references: [id])
+
+  receiverId String
+  receiver   User   @relation("FlowerReceiver", fields: [receiverId], references: [id])
+}
+
+enum FlowerType {
+  YELLOW_TO_RED   // Yellow from sender → becomes Red for receiver
+  YELLOW_TO_WISH  // Yellow pledged into a wish pool (will become Purple on completion)
+  EXCHANGE_RED_TO_YELLOW // Red exchanged for Yellow
+  EXCHANGE_PURPLE_TO_YELLOW // Purple exchanged for Yellow
+}
+
+// ============================================
+// System Settings (Admin configurable)
+// ============================================
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
