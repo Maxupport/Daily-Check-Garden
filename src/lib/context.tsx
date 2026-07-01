@@ -68,9 +68,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserData>(defaultUser);
   const [quest, setQuest] = useState<QuestData>(defaultQuest);
   
-  const [communityList, setCommunityList] = useState([]);
+  const [communityList, setCommunityList] = useState<any[]>([]);
 
-  const [wishList, setWishList] = useState([]);
+  const [wishList, setWishList] = useState<any[]>([]);
 
   const [toast, setToast] = useState({ show: false, message: '' });
   const [initialized, setInitialized] = useState(false);
